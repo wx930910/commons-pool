@@ -17,6 +17,9 @@
 package org.apache.commons.pool2;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.junit.jupiter.api.Test;
@@ -25,25 +28,23 @@ import org.junit.jupiter.api.Test;
  */
 public class TestBaseKeyedPoolableObjectFactory {
 
-    @Test
-    public void testDefaultMethods() throws Exception {
-        final KeyedPooledObjectFactory<Object,Object> factory = new TestFactory();
+	public static BaseKeyedPooledObjectFactory<Object, Object> mockBaseKeyedPooledObjectFactory1() throws Exception {
+		BaseKeyedPooledObjectFactory<Object, Object> mockInstance = spy(BaseKeyedPooledObjectFactory.class);
+		doAnswer((stubInvo) -> {
+			Object value = stubInvo.getArgument(0);
+			return new DefaultPooledObject<>(value);
+		}).when(mockInstance).wrap(any());
+		return mockInstance;
+	}
 
-        factory.activateObject("key",null); // a no-op
-        factory.passivateObject("key",null); // a no-op
-        factory.destroyObject("key",null); // a no-op
-        assertTrue(factory.validateObject("key",null)); // constant true
-    }
+	@Test
+	public void testDefaultMethods() throws Exception {
+		final KeyedPooledObjectFactory<Object, Object> factory = TestBaseKeyedPoolableObjectFactory
+				.mockBaseKeyedPooledObjectFactory1();
 
-    private static class TestFactory
-            extends BaseKeyedPooledObjectFactory<Object,Object> {
-        @Override
-        public Object create(final Object key) throws Exception {
-            return null;
-        }
-        @Override
-        public PooledObject<Object> wrap(final Object value) {
-            return new DefaultPooledObject<>(value);
-        }
-    }
+		factory.activateObject("key", null); // a no-op
+		factory.passivateObject("key", null); // a no-op
+		factory.destroyObject("key", null); // a no-op
+		assertTrue(factory.validateObject("key", null)); // constant true
+	}
 }

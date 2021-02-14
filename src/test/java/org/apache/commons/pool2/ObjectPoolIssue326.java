@@ -17,6 +17,11 @@
 
 package org.apache.commons.pool2;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -24,6 +29,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+
 import org.apache.commons.pool2.impl.BaseObjectPoolConfig;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
@@ -37,122 +43,121 @@ import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
  * negatively since you need to run it for a while.
  */
 public final class ObjectPoolIssue326 {
-    public static void main(final String[] args) {
-        try {
-            new ObjectPoolIssue326().run();
-        } catch (final Exception e) {
-            e.printStackTrace();
-        }
-    }
+	public BaseKeyedPooledObjectFactory<Integer, Object> mockBaseKeyedPooledObjectFactory1() throws Exception {
+		BaseKeyedPooledObjectFactory<Integer, Object> mockInstance = spy(BaseKeyedPooledObjectFactory.class);
+		doAnswer((stubInvo) -> {
+			Object o = stubInvo.getArgument(0);
+			return new DefaultPooledObject<>(o);
+		}).when(mockInstance).wrap(any());
+		doReturn(new TestObject()).when(mockInstance).create(any());
+		return mockInstance;
+	}
 
-    private void run() throws Exception {
-        final GenericKeyedObjectPoolConfig poolConfig = new GenericKeyedObjectPoolConfig();
-        poolConfig.setMaxTotal(10);
-        poolConfig.setMaxTotalPerKey(5);
-        poolConfig.setMinIdlePerKey(-1);
-        poolConfig.setMaxIdlePerKey(-1);
-        poolConfig.setLifo(true);
-        poolConfig.setFairness(true);
-        poolConfig.setMaxWaitMillis(30 * 1000);
-        poolConfig.setMinEvictableIdleTimeMillis(-1);
-        poolConfig.setSoftMinEvictableIdleTimeMillis(-1);
-        poolConfig.setNumTestsPerEvictionRun(1);
-        poolConfig.setTestOnCreate(false);
-        poolConfig.setTestOnBorrow(false);
-        poolConfig.setTestOnReturn(false);
-        poolConfig.setTestWhileIdle(false);
-        poolConfig.setTimeBetweenEvictionRunsMillis(5 * 1000);
-        poolConfig.setEvictionPolicyClassName(BaseObjectPoolConfig.DEFAULT_EVICTION_POLICY_CLASS_NAME);
-        poolConfig.setBlockWhenExhausted(false);
-        poolConfig.setJmxEnabled(false);
-        poolConfig.setJmxNameBase(null);
-        poolConfig.setJmxNamePrefix(null);
+	public static void main(final String[] args) {
+		try {
+			new ObjectPoolIssue326().run();
+		} catch (final Exception e) {
+			e.printStackTrace();
+		}
+	}
 
-        final GenericKeyedObjectPool<Integer, Object> pool = new GenericKeyedObjectPool<>(new ObjectFactory(), poolConfig);
+	private void run() throws Exception {
+		final GenericKeyedObjectPoolConfig poolConfig = new GenericKeyedObjectPoolConfig();
+		poolConfig.setMaxTotal(10);
+		poolConfig.setMaxTotalPerKey(5);
+		poolConfig.setMinIdlePerKey(-1);
+		poolConfig.setMaxIdlePerKey(-1);
+		poolConfig.setLifo(true);
+		poolConfig.setFairness(true);
+		poolConfig.setMaxWaitMillis(30 * 1000);
+		poolConfig.setMinEvictableIdleTimeMillis(-1);
+		poolConfig.setSoftMinEvictableIdleTimeMillis(-1);
+		poolConfig.setNumTestsPerEvictionRun(1);
+		poolConfig.setTestOnCreate(false);
+		poolConfig.setTestOnBorrow(false);
+		poolConfig.setTestOnReturn(false);
+		poolConfig.setTestWhileIdle(false);
+		poolConfig.setTimeBetweenEvictionRunsMillis(5 * 1000);
+		poolConfig.setEvictionPolicyClassName(BaseObjectPoolConfig.DEFAULT_EVICTION_POLICY_CLASS_NAME);
+		poolConfig.setBlockWhenExhausted(false);
+		poolConfig.setJmxEnabled(false);
+		poolConfig.setJmxNameBase(null);
+		poolConfig.setJmxNamePrefix(null);
 
-        // number of threads to reproduce is finicky. this count seems to be best for my
-        // 4 core box.
-        // too many doesn't reproduce it ever, too few doesn't either.
-        final ExecutorService service = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
-        final long startTimeMillis = System.currentTimeMillis();
-        long testIter = 0;
-        try {
-            while (true) {
-                testIter++;
-                if (testIter % 1000 == 0) {
-                    System.out.println(testIter);
-                }
-                final List<Task> tasks = createTasks(pool);
-                final List<Future<Object>> futures = service.invokeAll(tasks);
-                for (final Future<Object> future : futures) {
-                    future.get();
-                }
-            }
-        } finally {
-            System.out.println("Time: " + (System.currentTimeMillis() - startTimeMillis) / 1000.0);
-            service.shutdown();
-        }
-    }
+		final GenericKeyedObjectPool<Integer, Object> pool = new GenericKeyedObjectPool<>(
+				mockBaseKeyedPooledObjectFactory1(), poolConfig);
 
-    private List<Task> createTasks(final GenericKeyedObjectPool<Integer, Object> pool) {
-        final List<Task> tasks = new ArrayList<>();
-        for (int i = 0; i < 250; i++) {
-            tasks.add(new Task(pool, i));
-        }
-        return tasks;
-    }
+		// number of threads to reproduce is finicky. this count seems to be best for my
+		// 4 core box.
+		// too many doesn't reproduce it ever, too few doesn't either.
+		final ExecutorService service = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
+		final long startTimeMillis = System.currentTimeMillis();
+		long testIter = 0;
+		try {
+			while (true) {
+				testIter++;
+				if (testIter % 1000 == 0) {
+					System.out.println(testIter);
+				}
+				final List<Task> tasks = createTasks(pool);
+				final List<Future<Object>> futures = service.invokeAll(tasks);
+				for (final Future<Object> future : futures) {
+					future.get();
+				}
+			}
+		} finally {
+			System.out.println("Time: " + (System.currentTimeMillis() - startTimeMillis) / 1000.0);
+			service.shutdown();
+		}
+	}
 
-    private class ObjectFactory extends BaseKeyedPooledObjectFactory<Integer, Object> {
-        @Override
-        public Object create(final Integer s) throws Exception {
-            return new TestObject();
-        }
+	private List<Task> createTasks(final GenericKeyedObjectPool<Integer, Object> pool) {
+		final List<Task> tasks = new ArrayList<>();
+		for (int i = 0; i < 250; i++) {
+			tasks.add(new Task(pool, i));
+		}
+		return tasks;
+	}
 
-        @Override
-        public PooledObject<Object> wrap(final Object o) {
-            return new DefaultPooledObject<>(o);
-        }
-    }
+	private class TestObject {
+	}
 
-    private class TestObject {
-    }
+	private class Task implements Callable<Object> {
+		private final GenericKeyedObjectPool<Integer, Object> m_pool;
+		private final int m_key;
 
-    private class Task implements Callable<Object> {
-        private final GenericKeyedObjectPool<Integer, Object> m_pool;
-        private final int m_key;
+		Task(final GenericKeyedObjectPool<Integer, Object> pool, final int count) {
+			m_pool = pool;
+			m_key = count % 20;
+		}
 
-        Task(final GenericKeyedObjectPool<Integer, Object> pool, final int count) {
-            m_pool = pool;
-            m_key = count % 20;
-        }
+		@Override
+		public Object call() throws Exception {
+			try {
+				final Object value;
+				value = m_pool.borrowObject(m_key);
+				// don't make this too long or it won't reproduce, and don't make it zero or it
+				// won't reproduce
+				// constant low value also doesn't reproduce
+				busyWait(System.currentTimeMillis() % 4);
+				m_pool.returnObject(m_key, value);
+				return "success";
+			} catch (final NoSuchElementException e) {
+				// ignore, we've exhausted the pool
+				// not sure whether what we do here matters for reproducing
+				busyWait(System.currentTimeMillis() % 20);
+				return "exhausted";
+			}
+		}
 
-        @Override
-        public Object call() throws Exception {
-            try {
-                final Object value;
-                value = m_pool.borrowObject(m_key);
-                // don't make this too long or it won't reproduce, and don't make it zero or it
-                // won't reproduce
-                // constant low value also doesn't reproduce
-                busyWait(System.currentTimeMillis() % 4);
-                m_pool.returnObject(m_key, value);
-                return "success";
-            } catch (final NoSuchElementException e) {
-                // ignore, we've exhausted the pool
-                // not sure whether what we do here matters for reproducing
-                busyWait(System.currentTimeMillis() % 20);
-                return "exhausted";
-            }
-        }
-
-        private void busyWait(final long timeMillis) {
-            // busy waiting intentionally as a simple thread.sleep fails to reproduce
-            final long endTimeMillis = System.currentTimeMillis() + timeMillis;
-            while (System.currentTimeMillis() < endTimeMillis) {
-                // empty
-            }
-        }
-    }
+		private void busyWait(final long timeMillis) {
+			// busy waiting intentionally as a simple thread.sleep fails to reproduce
+			final long endTimeMillis = System.currentTimeMillis() + timeMillis;
+			while (System.currentTimeMillis() < endTimeMillis) {
+				// empty
+			}
+		}
+	}
 }
 
 /*

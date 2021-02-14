@@ -45,10 +45,8 @@ final class TestSynchronizedPooledObjectFactory<T> implements PooledObjectFactor
 	/**
 	 * Create a SynchronizedPoolableObjectFactory wrapping the given factory.
 	 *
-	 * @param factory
-	 *            underlying factory to wrap
-	 * @throws IllegalArgumentException
-	 *             if the factory is null
+	 * @param factory underlying factory to wrap
+	 * @throws IllegalArgumentException if the factory is null
 	 */
 	TestSynchronizedPooledObjectFactory(final PooledObjectFactory<T> factory) throws IllegalArgumentException {
 		if (factory == null) {

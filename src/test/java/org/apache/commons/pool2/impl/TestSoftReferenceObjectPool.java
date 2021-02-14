@@ -16,9 +16,12 @@
  */
 package org.apache.commons.pool2.impl;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
+
 import org.apache.commons.pool2.BasePooledObjectFactory;
 import org.apache.commons.pool2.ObjectPool;
-import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.PooledObjectFactory;
 import org.apache.commons.pool2.TestBaseObjectPool;
 
@@ -26,41 +29,45 @@ import org.apache.commons.pool2.TestBaseObjectPool;
  */
 public class TestSoftReferenceObjectPool extends TestBaseObjectPool {
 
-    @Override
-    protected ObjectPool<String> makeEmptyPool(final int cap) {
-        return new SoftReferenceObjectPool<>(new SimpleFactory());
-    }
+	public static BasePooledObjectFactory<String> mockBasePooledObjectFactory1() {
+		int[] mockFieldVariableCounter = new int[] { 0 };
+		BasePooledObjectFactory<String> mockInstance = spy(BasePooledObjectFactory.class);
+		try {
+			doAnswer((stubInvo) -> {
+				return String.valueOf(mockFieldVariableCounter[0]++);
+			}).when(mockInstance).create();
+			doAnswer((stubInvo) -> {
+				String value = stubInvo.getArgument(0);
+				return new DefaultPooledObject<>(value);
+			}).when(mockInstance).wrap(any());
+		} catch (Exception exception) {
+			exception.printStackTrace();
+		}
+		return mockInstance;
+	}
 
-    @Override
-    protected ObjectPool<Object> makeEmptyPool(final PooledObjectFactory<Object> factory) {
-        return new SoftReferenceObjectPool<>(factory);
-    }
+	@Override
+	protected ObjectPool<String> makeEmptyPool(final int cap) {
+		return new SoftReferenceObjectPool<>(TestSoftReferenceObjectPool.mockBasePooledObjectFactory1());
+	}
 
-    @Override
-    protected Object getNthObject(final int n) {
-        return String.valueOf(n);
-    }
+	@Override
+	protected ObjectPool<Object> makeEmptyPool(final PooledObjectFactory<Object> factory) {
+		return new SoftReferenceObjectPool<>(factory);
+	}
 
-    @Override
-    protected boolean isLifo() {
-        return false;
-    }
+	@Override
+	protected Object getNthObject(final int n) {
+		return String.valueOf(n);
+	}
 
-    @Override
-    protected boolean isFifo() {
-        return false;
-    }
+	@Override
+	protected boolean isLifo() {
+		return false;
+	}
 
-
-    private static class SimpleFactory extends BasePooledObjectFactory<String>  {
-        int counter = 0;
-        @Override
-        public String create() {
-            return String.valueOf(counter++);
-        }
-        @Override
-        public PooledObject<String> wrap(final String value) {
-            return new DefaultPooledObject<>(value);
-        }
-    }
+	@Override
+	protected boolean isFifo() {
+		return false;
+	}
 }
