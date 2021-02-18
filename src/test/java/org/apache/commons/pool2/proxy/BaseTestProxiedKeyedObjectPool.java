@@ -19,151 +19,142 @@ package org.apache.commons.pool2.proxy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 import org.apache.commons.pool2.BaseKeyedPooledObjectFactory;
 import org.apache.commons.pool2.KeyedObjectPool;
 import org.apache.commons.pool2.KeyedPooledObjectFactory;
-import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-
-
 public abstract class BaseTestProxiedKeyedObjectPool {
 
-    private static final String KEY1 = "key1";
-    private static final String DATA1 = "data1";
+	public static BaseKeyedPooledObjectFactory<String, TestObject> mockBaseKeyedPooledObjectFactory1() {
+		BaseKeyedPooledObjectFactory<String, TestObject> mockInstance = spy(BaseKeyedPooledObjectFactory.class);
+		try {
+			doAnswer((stubInvo) -> {
+				TestObject value = stubInvo.getArgument(0);
+				return new DefaultPooledObject<>(value);
+			}).when(mockInstance).wrap(any());
+			doReturn(new TestObjectImpl()).when(mockInstance).create(any());
+		} catch (Throwable exception) {
+			exception.printStackTrace();
+		}
+		return mockInstance;
+	}
 
-    private KeyedObjectPool<String,TestObject> pool = null;
+	private static final String KEY1 = "key1";
+	private static final String DATA1 = "data1";
 
-    @BeforeEach
-    public void setUp() {
-        final GenericKeyedObjectPoolConfig<TestObject> config = new GenericKeyedObjectPoolConfig<>();
-        config.setMaxTotal(3);
+	private KeyedObjectPool<String, TestObject> pool = null;
 
-        final KeyedPooledObjectFactory<String, TestObject> factory =
-                new TestKeyedObjectFactory();
+	@BeforeEach
+	public void setUp() {
+		final GenericKeyedObjectPoolConfig<TestObject> config = new GenericKeyedObjectPoolConfig<>();
+		config.setMaxTotal(3);
 
-        @SuppressWarnings("resource")
-        final KeyedObjectPool<String, TestObject> innerPool =
-                new GenericKeyedObjectPool<>(
-                        factory, config);
+		final KeyedPooledObjectFactory<String, TestObject> factory = BaseTestProxiedKeyedObjectPool
+				.mockBaseKeyedPooledObjectFactory1();
 
-        pool = new ProxiedKeyedObjectPool<>(innerPool, getproxySource());
-    }
+		@SuppressWarnings("resource")
+		final KeyedObjectPool<String, TestObject> innerPool = new GenericKeyedObjectPool<>(factory, config);
 
+		pool = new ProxiedKeyedObjectPool<>(innerPool, getproxySource());
+	}
 
-    protected abstract ProxySource<TestObject> getproxySource();
+	protected abstract ProxySource<TestObject> getproxySource();
 
-    @Test
-    public void testBorrowObject() throws Exception {
-        final TestObject obj = pool.borrowObject(KEY1);
-        assertNotNull(obj);
+	@Test
+	public void testBorrowObject() throws Exception {
+		final TestObject obj = pool.borrowObject(KEY1);
+		assertNotNull(obj);
 
-        // Make sure proxied methods are working
-        obj.setData(DATA1);
-        assertEquals(DATA1, obj.getData());
+		// Make sure proxied methods are working
+		obj.setData(DATA1);
+		assertEquals(DATA1, obj.getData());
 
-        pool.returnObject(KEY1, obj);
-    }
+		pool.returnObject(KEY1, obj);
+	}
 
+	@Test
+	public void testAccessAfterReturn() throws Exception {
+		final TestObject obj = pool.borrowObject(KEY1);
+		assertNotNull(obj);
 
-    @Test
-    public void testAccessAfterReturn() throws Exception {
-        final TestObject obj = pool.borrowObject(KEY1);
-        assertNotNull(obj);
+		// Make sure proxied methods are working
+		obj.setData(DATA1);
+		assertEquals(DATA1, obj.getData());
 
-        // Make sure proxied methods are working
-        obj.setData(DATA1);
-        assertEquals(DATA1, obj.getData());
+		pool.returnObject(KEY1, obj);
 
-        pool.returnObject(KEY1, obj);
+		assertNotNull(obj);
+		assertThrows(IllegalStateException.class, () -> obj.getData());
+	}
 
-        assertNotNull(obj);
-        assertThrows(IllegalStateException.class,
-                () -> obj.getData());
-    }
+	@Test
+	public void testAccessAfterInvalidate() throws Exception {
+		final TestObject obj = pool.borrowObject(KEY1);
+		assertNotNull(obj);
 
+		// Make sure proxied methods are working
+		obj.setData(DATA1);
+		assertEquals(DATA1, obj.getData());
 
-    @Test
-    public void testAccessAfterInvalidate() throws Exception {
-        final TestObject obj = pool.borrowObject(KEY1);
-        assertNotNull(obj);
+		pool.invalidateObject(KEY1, obj);
 
-        // Make sure proxied methods are working
-        obj.setData(DATA1);
-        assertEquals(DATA1, obj.getData());
+		assertNotNull(obj);
 
-        pool.invalidateObject(KEY1, obj);
+		assertThrows(IllegalStateException.class, () -> obj.getData());
 
-        assertNotNull(obj);
+	}
 
-        assertThrows(IllegalStateException.class,
-                () -> obj.getData() );
+	@Test
+	public void testPassThroughMethods01() throws Exception {
+		assertEquals(0, pool.getNumActive());
+		assertEquals(0, pool.getNumIdle());
 
-    }
+		pool.addObject(KEY1);
 
+		assertEquals(0, pool.getNumActive());
+		assertEquals(1, pool.getNumIdle());
 
-    @Test
-    public void testPassThroughMethods01() throws Exception {
-        assertEquals(0, pool.getNumActive());
-        assertEquals(0, pool.getNumIdle());
+		pool.clear();
 
-        pool.addObject(KEY1);
+		assertEquals(0, pool.getNumActive());
+		assertEquals(0, pool.getNumIdle());
+	}
 
-        assertEquals(0, pool.getNumActive());
-        assertEquals(1, pool.getNumIdle());
+	@Test
+	public void testPassThroughMethods02() throws Exception {
+		pool.close();
+		assertThrows(IllegalStateException.class, () -> pool.addObject(KEY1));
+	}
 
-        pool.clear();
+	protected interface TestObject {
+		String getData();
 
-        assertEquals(0, pool.getNumActive());
-        assertEquals(0, pool.getNumIdle());
-    }
+		void setData(String data);
+	}
 
+	private static class TestObjectImpl implements TestObject {
 
-    @Test
-    public void testPassThroughMethods02() throws Exception {
-        pool.close();
-        assertThrows(IllegalStateException.class,
-                () -> pool.addObject(KEY1));
-    }
+		private String data;
 
-    private static class TestKeyedObjectFactory extends
-            BaseKeyedPooledObjectFactory<String,TestObject> {
+		@Override
+		public String getData() {
+			return data;
+		}
 
-        @Override
-        public TestObject create(final String key) throws Exception {
-            return new TestObjectImpl();
-        }
-        @Override
-        public PooledObject<TestObject> wrap(final TestObject value) {
-            return new DefaultPooledObject<>(value);
-        }
-    }
-
-
-    protected interface TestObject {
-        String getData();
-        void setData(String data);
-    }
-
-
-    private static class TestObjectImpl implements TestObject {
-
-        private String data;
-
-        @Override
-        public String getData() {
-            return data;
-        }
-
-        @Override
-        public void setData(final String data) {
-            this.data = data;
-        }
-    }
+		@Override
+		public void setData(final String data) {
+			this.data = data;
+		}
+	}
 
 }

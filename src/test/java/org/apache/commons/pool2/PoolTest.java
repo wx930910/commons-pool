@@ -17,6 +17,8 @@
 
 package org.apache.commons.pool2;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.*;
 
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericObjectPool;
@@ -24,69 +26,54 @@ import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-
 @Disabled
 public class PoolTest {
-    private static final CharSequence COMMONS_POOL_EVICTIONS_TIMER_THREAD_NAME = "commons-pool-EvictionTimer";
-    private static final long EVICTION_PERIOD_IN_MILLIS = 100;
+	public static PooledObjectFactory<Foo> mockPooledObjectFactory1()
+			throws Exception, Exception, Exception, Exception {
+		long mockFieldVariableVALIDATION_WAIT_IN_MILLIS = 1000;
+		PooledObjectFactory<Foo> mockInstance = spy(PooledObjectFactory.class);
+		doAnswer((stubInvo) -> {
+			try {
+				Thread.sleep(mockFieldVariableVALIDATION_WAIT_IN_MILLIS);
+			} catch (final InterruptedException e) {
+				Thread.interrupted();
+			}
+			return false;
+		}).when(mockInstance).validateObject(any());
+		doAnswer((stubInvo) -> {
+			return new DefaultPooledObject<>(new Foo());
+		}).when(mockInstance).makeObject();
+		return mockInstance;
+	}
 
-    private static class Foo {
-    }
+	private static final CharSequence COMMONS_POOL_EVICTIONS_TIMER_THREAD_NAME = "commons-pool-EvictionTimer";
+	private static final long EVICTION_PERIOD_IN_MILLIS = 100;
 
-    private static class PooledFooFactory implements PooledObjectFactory<Foo> {
-        private static final long VALIDATION_WAIT_IN_MILLIS = 1000;
+	private static class Foo {
+	}
 
-        @Override
-        public PooledObject<Foo> makeObject() throws Exception {
-            return new DefaultPooledObject<>(new Foo());
-        }
-
-        @Override
-        public void destroyObject(final PooledObject<Foo> pooledObject) throws Exception {
-        }
-
-        @Override
-        public boolean validateObject(final PooledObject<Foo> pooledObject) {
-            try {
-                Thread.sleep(VALIDATION_WAIT_IN_MILLIS);
-            } catch (final InterruptedException e) {
-                Thread.interrupted();
-            }
-            return false;
-        }
-
-        @Override
-        public void activateObject(final PooledObject<Foo> pooledObject) throws Exception {
-        }
-
-        @Override
-        public void passivateObject(final PooledObject<Foo> pooledObject) throws Exception {
-        }
-    }
-
-    @Test
-    public void testPool() throws Exception {
-        final GenericObjectPoolConfig poolConfig = new GenericObjectPoolConfig();
-        poolConfig.setTestWhileIdle(true /* testWhileIdle */);
-        final PooledFooFactory pooledFooFactory = new PooledFooFactory();
-        try (GenericObjectPool<Foo> pool = new GenericObjectPool<>(pooledFooFactory, poolConfig)) {
-            pool.setTimeBetweenEvictionRunsMillis(EVICTION_PERIOD_IN_MILLIS);
-            pool.addObject();
-            try {
-                Thread.sleep(EVICTION_PERIOD_IN_MILLIS);
-            } catch (final InterruptedException e) {
-                Thread.interrupted();
-            }
-        }
-        final Thread[] threads = new Thread[Thread.activeCount()];
-        Thread.enumerate(threads);
-        for (final Thread thread : threads) {
-            if (thread == null) {
-                continue;
-            }
-            final String name = thread.getName();
-            assertFalse( name.contains(COMMONS_POOL_EVICTIONS_TIMER_THREAD_NAME),name);
-        }
-    }
+	@Test
+	public void testPool() throws Exception, Exception, Exception, Exception, Exception {
+		final GenericObjectPoolConfig poolConfig = new GenericObjectPoolConfig();
+		poolConfig.setTestWhileIdle(true /* testWhileIdle */);
+		final PooledObjectFactory<Foo> pooledFooFactory = PoolTest.mockPooledObjectFactory1();
+		try (GenericObjectPool<Foo> pool = new GenericObjectPool<>(pooledFooFactory, poolConfig)) {
+			pool.setTimeBetweenEvictionRunsMillis(EVICTION_PERIOD_IN_MILLIS);
+			pool.addObject();
+			try {
+				Thread.sleep(EVICTION_PERIOD_IN_MILLIS);
+			} catch (final InterruptedException e) {
+				Thread.interrupted();
+			}
+		}
+		final Thread[] threads = new Thread[Thread.activeCount()];
+		Thread.enumerate(threads);
+		for (final Thread thread : threads) {
+			if (thread == null) {
+				continue;
+			}
+			final String name = thread.getName();
+			assertFalse(name.contains(COMMONS_POOL_EVICTIONS_TIMER_THREAD_NAME), name);
+		}
+	}
 }

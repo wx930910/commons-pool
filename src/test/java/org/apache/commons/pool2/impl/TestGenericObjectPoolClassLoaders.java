@@ -16,111 +16,103 @@
  */
 package org.apache.commons.pool2.impl;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
+
 import java.net.URL;
 import java.net.URLClassLoader;
 
 import org.apache.commons.pool2.BasePooledObjectFactory;
-import org.apache.commons.pool2.PooledObject;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 
 public class TestGenericObjectPoolClassLoaders {
 
-    private static final URL BASE_URL =
-            TestGenericObjectPoolClassLoaders.class.getResource(
-                    "/org/apache/commons/pool2/impl/");
+	public static BasePooledObjectFactory<URL> mockBasePooledObjectFactory1(final int n) throws Exception {
+		int mockFieldVariableN;
+		BasePooledObjectFactory<URL> mockInstance = spy(BasePooledObjectFactory.class);
+		mockFieldVariableN = n;
+		doAnswer((stubInvo) -> {
+			URL value = stubInvo.getArgument(0);
+			return new DefaultPooledObject<>(value);
+		}).when(mockInstance).wrap(any());
+		doAnswer((stubInvo) -> {
+			final URL url = Thread.currentThread().getContextClassLoader().getResource("test" + mockFieldVariableN);
+			if (url == null) {
+				throw new IllegalStateException("Object should not be null");
+			}
+			return url;
+		}).when(mockInstance).create();
+		return mockInstance;
+	}
 
-    @Test
-    public void testContextClassLoader() throws Exception {
+	private static final URL BASE_URL = TestGenericObjectPoolClassLoaders.class
+			.getResource("/org/apache/commons/pool2/impl/");
 
-        final ClassLoader savedClassloader =
-                Thread.currentThread().getContextClassLoader();
+	@Test
+	public void testContextClassLoader() throws Exception, Exception, Exception {
 
-        try {
-            final CustomClassLoader cl1 = new CustomClassLoader(1);
-            Thread.currentThread().setContextClassLoader(cl1);
-            final CustomClassLoaderObjectFactory factory1 =
-                    new CustomClassLoaderObjectFactory(1);
-            final GenericObjectPool<URL> pool1 = new GenericObjectPool<>(factory1);
-            pool1.setMinIdle(1);
-            pool1.setTimeBetweenEvictionRunsMillis(100);
-            int counter = 0;
-            while (counter < 50 && pool1.getNumIdle() != 1) {
-                Thread.sleep(100);
-                counter++;
-            }
-            assertEquals( 1, pool1.getNumIdle(),"Wrong number of idle objects in pool1");
+		final ClassLoader savedClassloader = Thread.currentThread().getContextClassLoader();
 
-            // ---------------
-            final CustomClassLoader cl2 = new CustomClassLoader(2);
-            Thread.currentThread().setContextClassLoader(cl2);
-            final CustomClassLoaderObjectFactory factory2 =
-                    new CustomClassLoaderObjectFactory(2);
-            final GenericObjectPool<URL> pool2 =
-                    new GenericObjectPool<>(factory2);
-            pool2.setMinIdle(1);
+		try {
+			final CustomClassLoader cl1 = new CustomClassLoader(1);
+			Thread.currentThread().setContextClassLoader(cl1);
+			final BasePooledObjectFactory<URL> factory1 = TestGenericObjectPoolClassLoaders
+					.mockBasePooledObjectFactory1(1);
+			final GenericObjectPool<URL> pool1 = new GenericObjectPool<>(factory1);
+			pool1.setMinIdle(1);
+			pool1.setTimeBetweenEvictionRunsMillis(100);
+			int counter = 0;
+			while (counter < 50 && pool1.getNumIdle() != 1) {
+				Thread.sleep(100);
+				counter++;
+			}
+			assertEquals(1, pool1.getNumIdle(), "Wrong number of idle objects in pool1");
 
-            pool2.addObject();
-            assertEquals( 1, pool2.getNumIdle(),"Wrong number of idle objects in pool2");
-            pool2.clear();
+			// ---------------
+			final CustomClassLoader cl2 = new CustomClassLoader(2);
+			Thread.currentThread().setContextClassLoader(cl2);
+			final BasePooledObjectFactory<URL> factory2 = TestGenericObjectPoolClassLoaders
+					.mockBasePooledObjectFactory1(2);
+			final GenericObjectPool<URL> pool2 = new GenericObjectPool<>(factory2);
+			pool2.setMinIdle(1);
 
-            pool2.setTimeBetweenEvictionRunsMillis(100);
+			pool2.addObject();
+			assertEquals(1, pool2.getNumIdle(), "Wrong number of idle objects in pool2");
+			pool2.clear();
 
-            counter = 0;
-            while (counter < 50 && pool2.getNumIdle() != 1) {
-                Thread.sleep(100);
-                counter++;
-            }
-            assertEquals( 1, pool2.getNumIdle(),"Wrong number of  idle objects in pool2");
+			pool2.setTimeBetweenEvictionRunsMillis(100);
 
-            pool1.close();
-            pool2.close();
-        } finally {
-            Thread.currentThread().setContextClassLoader(savedClassloader);
-        }
-    }
+			counter = 0;
+			while (counter < 50 && pool2.getNumIdle() != 1) {
+				Thread.sleep(100);
+				counter++;
+			}
+			assertEquals(1, pool2.getNumIdle(), "Wrong number of  idle objects in pool2");
 
-    private static class CustomClassLoaderObjectFactory extends
-            BasePooledObjectFactory<URL> {
-        private final int n;
+			pool1.close();
+			pool2.close();
+		} finally {
+			Thread.currentThread().setContextClassLoader(savedClassloader);
+		}
+	}
 
-        CustomClassLoaderObjectFactory(final int n) {
-            this.n = n;
-        }
+	private static class CustomClassLoader extends URLClassLoader {
+		private final int n;
 
-        @Override
-        public URL create() throws Exception {
-            final URL url = Thread.currentThread().getContextClassLoader()
-                    .getResource("test" + n);
-            if (url == null) {
-                throw new IllegalStateException("Object should not be null");
-            }
-            return url;
-        }
+		CustomClassLoader(final int n) {
+			super(new URL[] { BASE_URL });
+			this.n = n;
+		}
 
-        @Override
-        public PooledObject<URL> wrap(final URL value) {
-            return new DefaultPooledObject<>(value);
-        }
-    }
+		@Override
+		public URL findResource(final String name) {
+			if (!name.endsWith(String.valueOf(n))) {
+				return null;
+			}
 
-    private static class CustomClassLoader extends URLClassLoader {
-        private final int n;
-
-        CustomClassLoader(final int n) {
-            super(new URL[] { BASE_URL });
-            this.n = n;
-        }
-
-        @Override
-        public URL findResource(final String name) {
-            if (!name.endsWith(String.valueOf(n))) {
-                return null;
-            }
-
-            return super.findResource(name);
-        }
-    }
+			return super.findResource(name);
+		}
+	}
 }
