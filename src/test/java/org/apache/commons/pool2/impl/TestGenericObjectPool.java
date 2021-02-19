@@ -67,6 +67,15 @@ import org.junit.jupiter.api.Timeout;
  */
 public class TestGenericObjectPool extends TestBaseObjectPool {
 
+	public static BasePooledObjectFactory<Object> mockBasePooledObjectFactory1() throws Exception {
+		BasePooledObjectFactory<Object> mockInstance = spy(BasePooledObjectFactory.class);
+		doAnswer((stubInvo) -> {
+			Object value = stubInvo.getArgument(0);
+			return new DefaultPooledObject<>(value);
+		}).when(mockInstance).wrap(any());
+		return mockInstance;
+	}
+
 	private class ConcurrentBorrowAndEvictThread extends Thread {
 		private final boolean borrow;
 		public String obj;
@@ -133,18 +142,6 @@ public class TestGenericObjectPool extends TestBaseObjectPool {
 		@Override
 		public PooledObject<String> wrap(final String obj) {
 			return new DefaultPooledObject<>(obj);
-		}
-	}
-
-	private static final class DummyFactory extends BasePooledObjectFactory<Object> {
-		@Override
-		public Object create() throws Exception {
-			return null;
-		}
-
-		@Override
-		public PooledObject<Object> wrap(final Object value) {
-			return new DefaultPooledObject<>(value);
 		}
 	}
 
@@ -1212,7 +1209,7 @@ public class TestGenericObjectPool extends TestBaseObjectPool {
 
 	@Test
 	@Timeout(value = 60000, unit = TimeUnit.MILLISECONDS)
-	public void testConstructors() throws Exception {
+	public void testConstructors() throws Exception, Exception {
 
 		// Make constructor arguments all different from defaults
 		final int minIdle = 2;
@@ -1227,7 +1224,7 @@ public class TestGenericObjectPool extends TestBaseObjectPool {
 		final long timeBetweenEvictionRunsMillis = 8;
 		final boolean blockWhenExhausted = false;
 		final boolean lifo = false;
-		final PooledObjectFactory<Object> dummyFactory = new DummyFactory();
+		final PooledObjectFactory<Object> dummyFactory = TestGenericObjectPool.mockBasePooledObjectFactory1();
 		try (GenericObjectPool<Object> dummyPool = new GenericObjectPool<>(dummyFactory)) {
 			assertEquals(GenericObjectPoolConfig.DEFAULT_MAX_IDLE, dummyPool.getMaxIdle());
 			assertEquals(BaseObjectPoolConfig.DEFAULT_MAX_WAIT_MILLIS, dummyPool.getMaxWaitMillis());
