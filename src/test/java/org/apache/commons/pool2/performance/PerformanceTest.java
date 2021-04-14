@@ -17,6 +17,11 @@
 
 package org.apache.commons.pool2.performance;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -25,6 +30,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.commons.pool2.PooledObject;
+import org.apache.commons.pool2.PooledObjectFactory;
+import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 
 /**
@@ -32,177 +40,229 @@ import org.apache.commons.pool2.impl.GenericObjectPool;
  *
  */
 public class PerformanceTest {
-    private int logLevel = 0;
-    private int nrIterations = 5;
+	private void debug(final String method, final Object obj, boolean[] debug) {
+		if (debug[0]) {
+			final String thread = "thread" + Thread.currentThread().getName();
+			System.out.println(thread + ": " + method + " " + obj);
+		}
+	}
 
-    private GenericObjectPool<Integer> pool;
+	private void sleep(final long millis) {
+		try {
+			Thread.sleep(millis);
+		} catch (final InterruptedException e) {
+		}
+	}
 
-    public void setLogLevel(final int i) {
-        logLevel = i;
-    }
+	private int logLevel = 0;
+	private int nrIterations = 5;
 
-    private static class TaskStats {
-        public int waiting = 0;
-        public int complete = 0;
-        public long totalBorrowTime = 0;
-        public long totalReturnTime = 0;
-        public int nrSamples = 0;
-    }
+	private GenericObjectPool<Integer> pool;
 
-    class PerfTask implements Callable<TaskStats> {
-        TaskStats taskStats = new TaskStats();
-        long borrowTime;
-        long returnTime;
+	public void setLogLevel(final int i) {
+		logLevel = i;
+	}
 
-        public void runOnce() {
-            try {
-                taskStats.waiting++;
-                if (logLevel >= 5) {
-                    final String name = "thread" + Thread.currentThread().getName();
-                    System.out.println(name +
-                            "   waiting: " + taskStats.waiting +
-                            "   complete: " + taskStats.complete);
-                }
-                final long bbegin = System.currentTimeMillis();
-                final Integer o = pool.borrowObject();
-                final long bend = System.currentTimeMillis();
-                taskStats.waiting--;
+	private static class TaskStats {
+		public int waiting = 0;
+		public int complete = 0;
+		public long totalBorrowTime = 0;
+		public long totalReturnTime = 0;
+		public int nrSamples = 0;
+	}
 
-                if (logLevel >= 3) {
-                    final String name = "thread" + Thread.currentThread().getName();
-                    System.out.println(name +
-                            "    waiting: " + taskStats.waiting +
-                            "   complete: " + taskStats.complete);
-                }
+	class PerfTask implements Callable<TaskStats> {
+		TaskStats taskStats = new TaskStats();
+		long borrowTime;
+		long returnTime;
 
-                final long rbegin = System.currentTimeMillis();
-                pool.returnObject(o);
-                final long rend = System.currentTimeMillis();
-                Thread.yield();
-                taskStats.complete++;
-                borrowTime = bend - bbegin;
-                returnTime = rend - rbegin;
-            } catch (final Exception e) {
-                e.printStackTrace();
-            }
-        }
+		public void runOnce() {
+			try {
+				taskStats.waiting++;
+				if (logLevel >= 5) {
+					final String name = "thread" + Thread.currentThread().getName();
+					System.out
+							.println(name + "   waiting: " + taskStats.waiting + "   complete: " + taskStats.complete);
+				}
+				final long bbegin = System.currentTimeMillis();
+				final Integer o = pool.borrowObject();
+				final long bend = System.currentTimeMillis();
+				taskStats.waiting--;
 
-       @Override
-    public TaskStats call() throws Exception {
-           runOnce(); // warmup
-           for (int i = 0; i < nrIterations; i++) {
-               runOnce();
-               taskStats.totalBorrowTime += borrowTime;
-               taskStats.totalReturnTime += returnTime;
-               taskStats.nrSamples++;
-               if (logLevel >= 2) {
-                   final String name = "thread" + Thread.currentThread().getName();
-                   System.out.println("result " + taskStats.nrSamples + '\t' +
-                           name + '\t' + "borrow time: " + borrowTime + '\t' +
-                           "return time: " + returnTime + '\t' + "waiting: " +
-                           taskStats.waiting + '\t' + "complete: " +
-                           taskStats.complete);
-               }
-           }
-           return taskStats;
-       }
-    }
+				if (logLevel >= 3) {
+					final String name = "thread" + Thread.currentThread().getName();
+					System.out
+							.println(name + "    waiting: " + taskStats.waiting + "   complete: " + taskStats.complete);
+				}
 
-    private void run(final int iterations, final int nrThreads, final int maxTotal, final int maxIdle) {
-        this.nrIterations = iterations;
+				final long rbegin = System.currentTimeMillis();
+				pool.returnObject(o);
+				final long rend = System.currentTimeMillis();
+				Thread.yield();
+				taskStats.complete++;
+				borrowTime = bend - bbegin;
+				returnTime = rend - rbegin;
+			} catch (final Exception e) {
+				e.printStackTrace();
+			}
+		}
 
-        final SleepingObjectFactory factory = new SleepingObjectFactory();
-        if (logLevel >= 4) { factory.setDebug(true); }
-        pool = new GenericObjectPool<>(factory);
-        pool.setMaxTotal(maxTotal);
-        pool.setMaxIdle(maxIdle);
-        pool.setTestOnBorrow(true);
+		@Override
+		public TaskStats call() throws Exception {
+			runOnce(); // warmup
+			for (int i = 0; i < nrIterations; i++) {
+				runOnce();
+				taskStats.totalBorrowTime += borrowTime;
+				taskStats.totalReturnTime += returnTime;
+				taskStats.nrSamples++;
+				if (logLevel >= 2) {
+					final String name = "thread" + Thread.currentThread().getName();
+					System.out.println("result " + taskStats.nrSamples + '\t' + name + '\t' + "borrow time: "
+							+ borrowTime + '\t' + "return time: " + returnTime + '\t' + "waiting: " + taskStats.waiting
+							+ '\t' + "complete: " + taskStats.complete);
+				}
+			}
+			return taskStats;
+		}
+	}
 
-        final ExecutorService threadPool = Executors.newFixedThreadPool(nrThreads);
+	private void run(final int iterations, final int nrThreads, final int maxTotal, final int maxIdle) {
+		this.nrIterations = iterations;
 
-        final List<Callable<TaskStats>> tasks = new ArrayList<>();
-        for (int i = 0; i < nrThreads; i++) {
-            tasks.add(new PerfTask());
-            Thread.yield();
-        }
+		final PooledObjectFactory<Integer> factory = mock(PooledObjectFactory.class);
+		int[] factoryCounter = new int[] { 0 };
+		boolean[] factoryDebug = new boolean[] { false };
+		try {
+			doAnswer((stubInvo) -> {
+				PooledObject<Integer> obj = stubInvo.getArgument(0);
+				debug("activateObject", obj, factoryDebug);
+				sleep(10);
+				return null;
+			}).when(factory).activateObject(any());
+			when(factory.validateObject(any(PooledObject.class))).thenAnswer((stubInvo) -> {
+				PooledObject<Integer> obj = stubInvo.getArgument(0);
+				debug("validateObject", obj, factoryDebug);
+				sleep(30);
+				return true;
+			});
+			doAnswer((stubInvo) -> {
+				PooledObject<Integer> obj = stubInvo.getArgument(0);
+				debug("passivateObject", obj, factoryDebug);
+				sleep(10);
+				return null;
+			}).when(factory).passivateObject(any());
+			when(factory.makeObject()).thenAnswer((stubInvo) -> {
+				final Integer obj = new Integer(factoryCounter[0]++);
+				debug("makeObject", obj, factoryDebug);
+				sleep(500);
+				return new DefaultPooledObject<>(obj);
+			});
+			doAnswer((stubInvo) -> {
+				PooledObject<Integer> obj = stubInvo.getArgument(0);
+				debug("destroyObject", obj, factoryDebug);
+				sleep(250);
+				return null;
+			}).when(factory).destroyObject(any());
+		} catch (Throwable exception) {
+			exception.printStackTrace();
+		}
+		if (logLevel >= 4) {
+			factoryDebug[0] = true;
+		}
+		pool = new GenericObjectPool<>(factory);
+		pool.setMaxTotal(maxTotal);
+		pool.setMaxIdle(maxIdle);
+		pool.setTestOnBorrow(true);
 
-        if (logLevel >= 1) {
-            System.out.println("created");
-        }
-        Thread.yield();
-        List<Future<TaskStats>> futures = null;
-        try {
-            futures = threadPool.invokeAll(tasks);
-        } catch (final InterruptedException e) {
-            e.printStackTrace();
-        }
+		final ExecutorService threadPool = Executors.newFixedThreadPool(nrThreads);
 
-        if (logLevel >= 1) { System.out.println("started"); }
-        Thread.yield();
+		final List<Callable<TaskStats>> tasks = new ArrayList<>();
+		for (int i = 0; i < nrThreads; i++) {
+			tasks.add(new PerfTask());
+			Thread.yield();
+		}
 
-        if (logLevel >= 1) { System.out.println("go"); }
-        Thread.yield();
+		if (logLevel >= 1) {
+			System.out.println("created");
+		}
+		Thread.yield();
+		List<Future<TaskStats>> futures = null;
+		try {
+			futures = threadPool.invokeAll(tasks);
+		} catch (final InterruptedException e) {
+			e.printStackTrace();
+		}
 
-        if (logLevel >= 1) { System.out.println("finish"); }
+		if (logLevel >= 1) {
+			System.out.println("started");
+		}
+		Thread.yield();
 
-        final TaskStats aggregate = new TaskStats();
-        if (futures != null) {
-            for (final Future<TaskStats> future : futures) {
-                TaskStats taskStats = null;
-                try {
-                    taskStats = future.get();
-                } catch (final InterruptedException e) {
-                    e.printStackTrace();
-                } catch (final ExecutionException e) {
-                    e.printStackTrace();
-                }
-                if (taskStats != null) {
-                    aggregate.complete += taskStats.complete;
-                    aggregate.nrSamples += taskStats.nrSamples;
-                    aggregate.totalBorrowTime += taskStats.totalBorrowTime;
-                    aggregate.totalReturnTime += taskStats.totalReturnTime;
-                    aggregate.waiting += taskStats.waiting;
-                }
-            }
-        }
+		if (logLevel >= 1) {
+			System.out.println("go");
+		}
+		Thread.yield();
 
-        System.out.println("-----------------------------------------");
-        System.out.println("nrIterations: " + iterations);
-        System.out.println("nrThreads: " + nrThreads);
-        System.out.println("maxTotal: " + maxTotal);
-        System.out.println("maxIdle: " + maxIdle);
-        System.out.println("nrSamples: " + aggregate.nrSamples);
-        System.out.println("totalBorrowTime: " + aggregate.totalBorrowTime);
-        System.out.println("totalReturnTime: " + aggregate.totalReturnTime);
-        System.out.println("avg BorrowTime: " +
-                aggregate.totalBorrowTime / aggregate.nrSamples);
-        System.out.println("avg ReturnTime: " +
-                aggregate.totalReturnTime / aggregate.nrSamples);
+		if (logLevel >= 1) {
+			System.out.println("finish");
+		}
 
-        threadPool.shutdown();
-    }
+		final TaskStats aggregate = new TaskStats();
+		if (futures != null) {
+			for (final Future<TaskStats> future : futures) {
+				TaskStats taskStats = null;
+				try {
+					taskStats = future.get();
+				} catch (final InterruptedException e) {
+					e.printStackTrace();
+				} catch (final ExecutionException e) {
+					e.printStackTrace();
+				}
+				if (taskStats != null) {
+					aggregate.complete += taskStats.complete;
+					aggregate.nrSamples += taskStats.nrSamples;
+					aggregate.totalBorrowTime += taskStats.totalBorrowTime;
+					aggregate.totalReturnTime += taskStats.totalReturnTime;
+					aggregate.waiting += taskStats.waiting;
+				}
+			}
+		}
 
-    public static void main(final String[] args) {
-        final PerformanceTest test = new PerformanceTest();
-        test.setLogLevel(0);
-        System.out.println("Increase threads");
-        test.run(1,  50,  5,  5);
-        test.run(1, 100,  5,  5);
-        test.run(1, 200,  5,  5);
-        test.run(1, 400,  5,  5);
+		System.out.println("-----------------------------------------");
+		System.out.println("nrIterations: " + iterations);
+		System.out.println("nrThreads: " + nrThreads);
+		System.out.println("maxTotal: " + maxTotal);
+		System.out.println("maxIdle: " + maxIdle);
+		System.out.println("nrSamples: " + aggregate.nrSamples);
+		System.out.println("totalBorrowTime: " + aggregate.totalBorrowTime);
+		System.out.println("totalReturnTime: " + aggregate.totalReturnTime);
+		System.out.println("avg BorrowTime: " + aggregate.totalBorrowTime / aggregate.nrSamples);
+		System.out.println("avg ReturnTime: " + aggregate.totalReturnTime / aggregate.nrSamples);
 
-        System.out.println("Increase threads & poolSize");
-        test.run(1,  50,  5,  5);
-        test.run(1, 100, 10, 10);
-        test.run(1, 200, 20, 20);
-        test.run(1, 400, 40, 40);
+		threadPool.shutdown();
+	}
 
-        System.out.println("Increase maxIdle");
-        test.run(1, 400, 40,  5);
-        test.run(1, 400, 40, 40);
+	public static void main(final String[] args) {
+		final PerformanceTest test = new PerformanceTest();
+		test.setLogLevel(0);
+		System.out.println("Increase threads");
+		test.run(1, 50, 5, 5);
+		test.run(1, 100, 5, 5);
+		test.run(1, 200, 5, 5);
+		test.run(1, 400, 5, 5);
+
+		System.out.println("Increase threads & poolSize");
+		test.run(1, 50, 5, 5);
+		test.run(1, 100, 10, 10);
+		test.run(1, 200, 20, 20);
+		test.run(1, 400, 40, 40);
+
+		System.out.println("Increase maxIdle");
+		test.run(1, 400, 40, 5);
+		test.run(1, 400, 40, 40);
 
 //      System.out.println("Show creation/destruction of objects");
 //      test.setLogLevel(4);
 //      test.run(1, 400, 40,  5);
-    }
+	}
 }

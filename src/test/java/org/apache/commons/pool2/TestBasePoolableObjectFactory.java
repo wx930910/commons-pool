@@ -17,6 +17,9 @@
 package org.apache.commons.pool2;
 
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.junit.Test;
@@ -25,24 +28,22 @@ import org.junit.Test;
  */
 public class TestBasePoolableObjectFactory {
 
-    @Test
-    public void testDefaultMethods() throws Exception {
-        final PooledObjectFactory<Object> factory = new TestFactory();
+	public static BasePooledObjectFactory<Object> mockBasePooledObjectFactory1() throws Exception {
+		BasePooledObjectFactory<Object> mockInstance = spy(BasePooledObjectFactory.class);
+		doAnswer((stubInvo) -> {
+			Object value = stubInvo.getArgument(0);
+			return new DefaultPooledObject<>(value);
+		}).when(mockInstance).wrap(any());
+		return mockInstance;
+	}
 
-        factory.activateObject(null); // a no-op
-        factory.passivateObject(null); // a no-op
-        factory.destroyObject(null); // a no-op
-        assertTrue(factory.validateObject(null)); // constant true
-    }
+	@Test
+	public void testDefaultMethods() throws Exception, Exception {
+		final PooledObjectFactory<Object> factory = TestBasePoolableObjectFactory.mockBasePooledObjectFactory1();
 
-    private static class TestFactory extends BasePooledObjectFactory<Object> {
-        @Override
-        public Object create() throws Exception {
-            return null;
-        }
-        @Override
-        public PooledObject<Object> wrap(final Object value) {
-            return new DefaultPooledObject<>(value);
-        }
-    }
+		factory.activateObject(null); // a no-op
+		factory.passivateObject(null); // a no-op
+		factory.destroyObject(null); // a no-op
+		assertTrue(factory.validateObject(null)); // constant true
+	}
 }
